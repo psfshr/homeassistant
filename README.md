@@ -1,2 +1,2 @@
-# esphome
-My ESPHome configuration files
+# HomeAssistant
+My ESPHome configuration files and related HomeAssistant configs
