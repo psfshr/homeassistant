@@ -15,6 +15,9 @@ esphome:
     build_flags: "-DBOARD_HAS_PSRAM"
     board_build.arduino.memory_type: qio_opi
     board_upload.maximum_ram_size: 524288
+  on_boot:
+    - delay: 5s
+    - lvgl.widget.hide: boot_screen
 
 esp32:
   board: esp32-s3-devkitc-1
@@ -43,6 +46,7 @@ wifi:
   ap:
     ssid: ${name}
     password: ${name}
+  power_save_mode: NONE
 
 captive_portal:
 
@@ -50,11 +54,25 @@ captive_portal:
 api:
   encryption:
     key: "y7+oPSvCkFAQtx0elE6fIzDNnEw7+NDULyWp/kus/Xc="
+  on_client_connected:
+    - if:
+        condition:
+          lambda: 'return (0 == client_info.find("Home Assistant "));'
+        then:
+          - lvgl.widget.show: lbl_hastatus
+  on_client_disconnected:
+    - if:
+        condition:
+          lambda: 'return (0 == client_info.find("Home Assistant "));'
+        then:
+          - lvgl.widget.hide: lbl_hastatus
 ota:
   platform: esphome
 
 # Enable logging
 logger:
+  hardware_uart: uart0
+#  level: VERBOSE
 
 ###############################################################################
 # INPUTS & OUTPUTS ############################################################
@@ -91,33 +109,6 @@ light:
     id: display_backlight
     restore_mode: ALWAYS_ON
 
-switch:
-  - platform: template
-    name: Antiburn
-    id: switch_antiburn
-    icon: mdi:television-shimmer
-    optimistic: true
-    entity_category: "config"
-    turn_on_action:
-      - logger.log: "Starting Antiburn"
-      - if:
-          condition: lvgl.is_paused
-          then:
-            - lvgl.resume:
-            - lvgl.widget.redraw:
-            - delay: 1s
-      - lvgl.pause:
-          show_snow: true
-    turn_off_action:
-      - logger.log: "Stopping Antiburn"
-      - if:
-          condition: lvgl.is_paused
-          then:
-            - lvgl.resume:
-            - lvgl.widget.redraw:
-            - delay: 1s
-            - lvgl.pause:
-
 ###############################################################################
 # VARIABLES & SCRIPTS #########################################################
 ###############################################################################
@@ -127,19 +118,6 @@ globals:
     type: int
     restore_value: no
     initial_value: "0"
-
-number:
-  - platform: template
-    name: LVGL Screen timeout
-    optimistic: true
-    id: display_timeout
-    unit_of_measurement: "s"
-    initial_value: 45
-    restore_value: true
-    min_value: 10
-    max_value: 180
-    step: 5
-    mode: box
 
 time:
   - platform: homeassistant
@@ -234,6 +212,7 @@ sensor:
     update_interval: 60s
     entity_category: "diagnostic"
 
+    # HomeAssistant Sensors
 
   - platform: homeassistant
     entity_id: sensor.octopus_rates
@@ -245,20 +224,25 @@ sensor:
     attribute: curr_rate_value
     id: octopus_curr_rate_value
     on_value:
-      - lvgl.indicator.update:
-          id: val_needle
-          value: !lambda return x;
-      - lvgl.label.update:
-          id: val_text
-          text:
-            format: "%.0f"
-            args: [ 'x' ]
+      then:
+        - lvgl.indicator.update:
+            id: val_needle
+            value: !lambda return x * 100;
+        - lvgl.label.update:
+            id: val_text
+            text:
+              format: "%.0f"
+              args: [ 'x * 100' ]
 
   - platform: homeassistant
     entity_id: sensor.octopus_rates
     attribute: next_rate_value
     id: octopus_next_rate_value
-
+    on_value:
+      then:
+        - lvgl.indicator.update:
+            id: val_needle2
+            value: !lambda return x * 100;
 
 ################################################################################
 
@@ -268,21 +252,19 @@ touchscreen:
     id: my_touchscreen
     interrupt_pin: GPIO05
     reset_pin: GPIO13
+    skip_probe: true
     on_touch:
       - lambda: |-
             ESP_LOGI("Touch:touch : ", "x=%d, y=%d, x_raw=%d, y_raw=%0d",
-                touch.x,
-                touch.y,
-                touch.x_raw,
-                touch.y_raw
-                );
+                touch.x, touch.y, touch.x_raw, touch.y_raw);
     on_release:
       - if:
           condition: lvgl.is_paused
           then:
             - logger.log: "LVGL resuming"
             - lvgl.resume:
-#s            - switch.turn_off: switch_antiburn
+            - lvgl.page.show:
+                id: octopus_page
             - lvgl.widget.redraw:
             - light.turn_on: display_backlight
 
@@ -307,21 +289,69 @@ lvgl:
   touchscreens:
     - my_touchscreen
   on_idle:
-    timeout: !lambda "return (id(display_timeout).state * 1000);"
-    then:
-      - logger.log: "LVGL is idle"
-#      - switch.turn_on: switch_antiburn
-      - light.turn_off: display_backlight
-      - lvgl.pause:
-          show_snow: true
+    - timeout: 30s
+      then:
+        - lvgl.page.show: octopus_page
+    - timeout: 5min
+      then:
+        - logger.log: "LVGL is idle"
+        - light.turn_off: display_backlight
+        - lvgl.pause:
+            show_snow: true
+
+  top_layer:
+    widgets:
+      - obj:
+          id: boot_screen
+          x: 0
+          y: 0
+          width: 100%
+          height: 100%
+          bg_color: 0xffffff
+          bg_opa: COVER
+          radius: 0
+          pad_all: 0
+          border_width: 0
+          widgets:
+            - spinner:
+                align: CENTER
+                height: 50
+                width: 50
+                spin_time: 1s
+                arc_length: 60deg
+                arc_width: 8
+                indicator:
+                  arc_color: 0x18bcf2
+                  arc_width: 8
+          on_press:
+            - lvgl.widget.hide: boot_screen
+      - obj:
+          id: icon_screen
+          x: 0
+          y: 0
+          width: 100%
+          height: 100%
+          bg_color: 0xffffff
+          bg_opa: TRANSP
+          radius: 0
+          pad_all: 0
+          border_width: 0
+          widgets:
+            - label:
+                text: "\uF1EB"
+                id: lbl_hastatus
+                align: BOTTOM_MID
+                text_align: CENTER
+                text_color: 0x0000FF
 
   pages:
-    - id: main_page
+    # - id: main_page
+    #   skip: true
     #   widgets:
     #     - label:
     #         align: CENTER
     #         text: 'Hello World!'
-    # - id: gauge_page
+    - id: octopus_page
       widgets:
         - obj:
             height: 240
@@ -329,61 +359,69 @@ lvgl:
             align: CENTER
             bg_color: 0xFFFFFF
             border_width: 0
-            pad_all: 4
+            pad_all: 0
             widgets:
               - meter:
                   height: 100%
                   width: 100%
                   border_width: 0
+                  pad_all: 0
                   bg_opa: TRANSP
                   align: CENTER
                   scales:
-                    - range_from: -0.1
-                      range_to: 1
-                      angle_range: 180 # sets the total angle to 180 = starts mid left and ends mid right
+                    - range_from: -20
+                      range_to: 100
+                      angle_range: 120
+                      rotation: 120
                       ticks:
-                        count: 0
+                        width: 1
+                        count: 13
+                        length: 5
+                        color: 0x000000
+                        major:
+                          stride: 2
+                          width: 2
+                          length: 10
+                          color: 0x404040
+                          label_gap: 10
                       indicators:
                         - line:
                             id: val_needle
-                            width: 8
-                            r_mod: 12 # sets line length by this much difference from the scale default radius
-                            value: -2
-                        - arc: # first half of the scale background
-                            color: 0x00FF00
-                            r_mod: 10 # radius difference from the scale default radius
-                            width: 31
-                            start_value: -0.1
-                            end_value: 0
-                        - arc: # second half of the scale background
-                            color: 0xFF3000
-                            r_mod: 10
-                            width: 31
-                            start_value: 0
-                            end_value: 1
+                            color: 0x0000bd
+                            width: 4
+                            r_mod: 12
+                            value: 0
+                        - line:
+                            id: val_needle2
+                            color: 0x666666
+                            width: 2
+                            r_mod: 12
+                            value: 0
+                        - tick_style:
+                            start_value: -10
+                            end_value: 100
+                            color_start: 0x00bd00
+                            color_end: 0xbd0000
+                            width: 1
               - obj: # to cover the middle part of meter indicator line
                   height: 146
                   width: 146
-                  radius: 73
+                  radius: 72
                   align: CENTER
                   border_width: 0
                   bg_color: 0xFFFFFF
                   pad_all: 0
               - label: # gauge numeric indicator
                   id: val_text
-                  text_font: montserrat_48
+                  text_font: montserrat_26
                   align: CENTER
-                  y: -5
+                  x: -35
+                  y: 0
                   text: "0"
-              - label: # lower range indicator
-                  text_font: montserrat_18
+              - label: # gauge numeric indicator
+                  text_font: montserrat_14
                   align: CENTER
-                  y: 8
-                  x: -90
-                  text: "-0.1"
-              - label: # higher range indicator
-                  text_font: montserrat_18
-                  align: CENTER
-                  y: 8
-                  x: 90
-                  text: "+1"
+                  x: -35
+                  y: 20
+                  text: "p/kWh"
+
