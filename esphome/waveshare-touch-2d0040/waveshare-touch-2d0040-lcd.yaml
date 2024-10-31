@@ -1,4 +1,22 @@
 ###############################################################################
+# NOTES #######################################################################
+###############################################################################
+
+# https://www.waveshare.com/wiki/ESP32-S3-Touch-LCD-1.28
+
+
+# https://esphome.io/components/i2c
+# https://esphome.io/components/uart
+
+# https://esphome.io/components/sensor/ld2420
+# 1 - 3v3 - VCC - Board Pin6
+# 2 - GND - GND - Board Pin5
+# 3 - OT1 - Serial Tx (to ESP Rx) - Board Pin8
+# 4 - RX - Serial Rx (to ESP Tx) - Board Pin7
+# 5 - OT2 - Presence Signal Output - N/C
+
+
+###############################################################################
 # BASE DEVICE CONFIG ##########################################################
 ###############################################################################
 
@@ -96,6 +114,14 @@ i2c:
   scan: true
   id: bus_a
 
+uart:
+  id: ld2420_uart
+  tx_pin: GPIO15
+  rx_pin: GPIO16
+  baud_rate: 115200
+  parity: NONE
+  stop_bits: 1
+
 output:
   - platform: ledc # Define a PWM output on the ESP32
     pin: GPIO02
@@ -109,6 +135,8 @@ light:
     id: display_backlight
     restore_mode: ALWAYS_ON
 
+ld2420:
+
 ###############################################################################
 # VARIABLES & SCRIPTS #########################################################
 ###############################################################################
@@ -118,6 +146,21 @@ globals:
     type: int
     restore_value: no
     initial_value: "0"
+
+number:
+  - platform: ld2420
+    presence_timeout:
+      name: mmWave Presence Timeout
+    min_gate_distance:
+      name: mmWave Gate Minimum
+    max_gate_distance:
+      name: mmWave Gate Maximum
+    gate_select:
+      name: mmWave Gate Select
+    still_threshold:
+      name: mmWave Still Threshold Value
+    move_threshold:
+      name: mmWave Move Threshold Value
 
 time:
   - platform: homeassistant
@@ -142,6 +185,22 @@ button:
     disabled_by_default: True
     name: "Factory Reset ESP"
     id: factory_reset_all
+
+
+  - platform: ld2420
+    apply_config:
+      name: mmWave Apply Config
+    factory_reset:
+      name: mmWave Factory Reset
+    restart_module:
+      name: mmWave Restart
+    revert_config:
+      name: mmWave Undo
+
+select:
+  - platform: ld2420
+    operating_mode:
+      name: mmWave Mode
 
 ###############################################################################
 # SENSORS #####################################################################
@@ -172,10 +231,18 @@ binary_sensor:
             animation: OUT_LEFT
             time: 300ms
 
+  - platform: ld2420
+    has_target:
+      name: mmWave Presence
+      id: mmwave_presence
 
 ###############################################################################
 
-#text_sensor:
+text_sensor:
+
+  - platform: ld2420
+    fw_version:
+      name: LD2420 Firmware
 
 ###############################################################################
 
@@ -211,6 +278,16 @@ sensor:
     id: wifi_signal_db
     update_interval: 60s
     entity_category: "diagnostic"
+
+
+  - platform: ld2420
+    moving_distance:
+      name : mmWave Moving Distance
+      filters:
+        - throttle_average: 15s
+        - filter_out: nan
+
+
 
     # HomeAssistant Sensors
 
