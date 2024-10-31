@@ -208,7 +208,7 @@ select:
 
 binary_sensor:
   - platform: touchscreen
-    name: LeftScreen
+    name: ScreenLeft
     x_min: 0
     x_max: 119
     y_min: 0
@@ -220,7 +220,7 @@ binary_sensor:
             time: 300ms
 
   - platform: touchscreen
-    name: RightScreen
+    name: ScreenRight
     x_min: 120
     x_max: 240
     y_min: 0
@@ -235,6 +235,23 @@ binary_sensor:
     has_target:
       name: mmWave Presence
       id: mmwave_presence
+      on_release:
+        then:
+          - logger.log: "LVGL is idle"
+          - light.turn_off: display_backlight
+          - lvgl.pause:
+              show_snow: true
+      on_press:
+        then:
+          - if:
+              condition: lvgl.is_paused
+              then:
+                - logger.log: "LVGL resuming"
+                - lvgl.resume:
+                - lvgl.page.show:
+                    id: octopus_page
+                - lvgl.widget.redraw:
+                - light.turn_on: display_backlight
 
 ###############################################################################
 
@@ -369,12 +386,12 @@ lvgl:
     - timeout: 30s
       then:
         - lvgl.page.show: octopus_page
-    - timeout: 5min
-      then:
-        - logger.log: "LVGL is idle"
-        - light.turn_off: display_backlight
-        - lvgl.pause:
-            show_snow: true
+    # - timeout: 5min
+    #   then:
+    #     - logger.log: "LVGL is idle"
+    #     - light.turn_off: display_backlight
+    #     - lvgl.pause:
+    #         show_snow: true
 
   top_layer:
     widgets:
