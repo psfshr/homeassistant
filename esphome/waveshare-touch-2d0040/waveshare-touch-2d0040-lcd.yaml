@@ -249,7 +249,7 @@ binary_sensor:
                 - logger.log: "LVGL resuming"
                 - lvgl.resume:
                 - lvgl.page.show:
-                    id: octopus_page
+                    id: energy_page
                 - lvgl.widget.redraw:
                 - light.turn_on: display_backlight
 
@@ -320,10 +320,10 @@ sensor:
     on_value:
       then:
         - lvgl.indicator.update:
-            id: val_needle
+            id: val_needle_current_rate
             value: !lambda return x * 100;
         - lvgl.label.update:
-            id: val_text
+            id: val_text_current_rate
             text:
               format: "%.0f"
               args: [ 'x * 100' ]
@@ -335,8 +335,22 @@ sensor:
     on_value:
       then:
         - lvgl.indicator.update:
-            id: val_needle2
+            id: val_needle_next_rate
             value: !lambda return x * 100;
+
+  - platform: homeassistant
+    entity_id: sensor.octopus_energy_electricity_23l3520058_2700001750370_current_demand
+    id: octopus_current_demand
+    on_value:
+      then:
+        - lvgl.indicator.update:
+            id: val_needle_current_demand
+            value: !lambda return x;
+        - lvgl.label.update:
+            id: val_text_current_demand
+            text:
+              format: "%.0f"
+              args: [ 'x' ]
 
 ################################################################################
 
@@ -358,7 +372,7 @@ touchscreen:
             - logger.log: "LVGL resuming"
             - lvgl.resume:
             - lvgl.page.show:
-                id: octopus_page
+                id: energy_page
             - lvgl.widget.redraw:
             - light.turn_on: display_backlight
 
@@ -385,7 +399,7 @@ lvgl:
   on_idle:
     - timeout: 30s
       then:
-        - lvgl.page.show: octopus_page
+        - lvgl.page.show: energy_page
     # - timeout: 5min
     #   then:
     #     - logger.log: "LVGL is idle"
@@ -399,8 +413,9 @@ lvgl:
           id: boot_screen
           x: 0
           y: 0
-          width: 100%
           height: 100%
+          width: 100%
+          align: CENTER
           bg_color: 0xffffff
           bg_opa: COVER
           radius: 0
@@ -423,8 +438,9 @@ lvgl:
           id: icon_screen
           x: 0
           y: 0
-          width: 100%
           height: 100%
+          width: 100%
+          align: CENTER
           bg_color: 0xffffff
           bg_opa: TRANSP
           radius: 0
@@ -432,9 +448,10 @@ lvgl:
           border_width: 0
           widgets:
             - label:
-                text: "\uF1EB"
+                text: "\uF015" # HA Connectivity Icon
                 id: lbl_hastatus
                 align: BOTTOM_MID
+                y: -10
                 text_align: CENTER
                 text_color: 0x0000FF
 
@@ -445,17 +462,19 @@ lvgl:
     #     - label:
     #         align: CENTER
     #         text: 'Hello World!'
-    - id: octopus_page
+    - id: energy_page
       widgets:
         - obj:
-            height: 240
-            width: 240
+            x: 0
+            y: 0
+            height: 100%
+            width: 100%
             align: CENTER
             bg_color: 0xFFFFFF
             border_width: 0
             pad_all: 0
             widgets:
-              - meter:
+              - meter: # Current rate meter
                   height: 100%
                   width: 100%
                   border_width: 0
@@ -480,13 +499,13 @@ lvgl:
                           label_gap: 10
                       indicators:
                         - line:
-                            id: val_needle
+                            id: val_needle_current_rate
                             color: 0x0000bd
                             width: 4
                             r_mod: 12
                             value: 0
                         - line:
-                            id: val_needle2
+                            id: val_needle_next_rate
                             color: 0x666666
                             width: 2
                             r_mod: 12
@@ -497,7 +516,45 @@ lvgl:
                             color_start: 0x00bd00
                             color_end: 0xbd0000
                             width: 1
-              - obj: # to cover the middle part of meter indicator line
+
+              - meter: # Current demand meter
+                  height: 100%
+                  width: 100%
+                  border_width: 0
+                  pad_all: 0
+                  bg_opa: TRANSP
+                  align: CENTER
+                  scales:
+                    - range_from: 10000
+                      range_to: 0
+                      angle_range: 120
+                      rotation: 300
+                      ticks:
+                        width: 1
+                        count: 11
+                        length: 5
+                        color: 0x000000
+                        major:
+                          stride: 2
+                          width: 2
+                          length: 10
+                          color: 0x404040
+                          label_gap: 10
+                      indicators:
+                        - line:
+                            id: val_needle_current_demand
+                            color: 0xbd0000
+                            width: 4
+                            r_mod: 12
+                            value: 0
+                        - tick_style:
+                            start_value: 10000
+                            end_value: 0
+                            color_start: 0xbd0000
+                            color_end: 0x00bd00
+                            width: 1
+
+              - obj: # Cover the middle part of meter indicator line
                   height: 146
                   width: 146
                   radius: 72
@@ -505,17 +562,31 @@ lvgl:
                   border_width: 0
                   bg_color: 0xFFFFFF
                   pad_all: 0
-              - label: # gauge numeric indicator
-                  id: val_text
-                  text_font: montserrat_26
+
+              - label: # Current rate numeric indicator
+                  id: val_text_current_rate
+                  text_font: montserrat_30
                   align: CENTER
                   x: -35
                   y: 0
                   text: "0"
-              - label: # gauge numeric indicator
+              - label: # Current rate unit label
                   text_font: montserrat_14
                   align: CENTER
                   x: -35
-                  y: 20
+                  y: 25
                   text: "p/kWh"
 
+              - label: # Current demand numeric indicator
+                  id: val_text_current_demand
+                  text_font: montserrat_30
+                  align: CENTER
+                  x: 35
+                  y: 0
+                  text: "0"
+              - label: # Current demand unit label
+                  text_font: montserrat_14
+                  align: CENTER
+                  x: 35
+                  y: 25
+                  text: "W"
